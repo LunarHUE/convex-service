@@ -1,38 +1,16 @@
 import {
   defineService,
   createFieldHooks,
-  createRlsRules,
   createServiceHooks,
-  type CreateZodSchemaFromFields,
-  type ZodToConvex,
-  type ServiceFieldsToConvex,
 } from '@lunarhue/convex-service/v2'
 import { defaultFields, emailField, profileIdField } from './fields'
 import { z } from 'zod/v4'
 import { DataModel } from './_generated/dataModel'
 import { TableAggregate } from '@convex-dev/aggregate'
 import { components } from './_generated/api'
-import type { DocumentByName, Expand, SystemFields } from 'convex/server'
-import { a } from 'vitest/dist/chunks/suite.d.FvehnV49.js'
-import type { Validator } from 'convex/values'
 
 const fieldHooks = createFieldHooks<DataModel, 'users'>()
-const rls = createRlsRules<DataModel, 'users'>()
 const serviceHooks = createServiceHooks<DataModel, 'users'>()
-
-rls.rule('insert', async () => {
-  return true
-})
-rls.rule('update', async () => {
-  return true
-})
-rls.rule('delete', async () => {
-  return true
-})
-rls.rule('read', async () => {
-  return true
-})
-
 serviceHooks
   .before(async ({ value, operation }) => {
     // console.log('serviceHooks.before', value, operation)
@@ -71,7 +49,6 @@ export const [usersService, usersTable] = defineService({
   .register({
     fieldHooks: fieldHooks,
     serviceHooks: serviceHooks,
-    rls: rls,
   })
 
 export const usersAggregate = new TableAggregate<{

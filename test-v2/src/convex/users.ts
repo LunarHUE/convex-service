@@ -17,15 +17,24 @@ export const getUser = query({
 
 export const insertMany = mutation({
   args: {
-    users: v.array(userValidator),
+    users: v.array(
+      v.object({
+        email: v.string(),
+        firstName: v.string(),
+        lastName: v.string(),
+        profileId: v.id('profiles'),
+      })
+    ),
   },
   handler: async (ctx, args) => {
-    const inserted = await ctx.db.insert('users').many(args.users)
+    const inserted = await ctx.db.insert('users').many(args.users, {
+      restrictions: false,
+    })
 
-    for (const user of inserted) {
-      const doc = await ctx.db.get(user)
-      await usersAggregate.insert(ctx, doc)
-    }
+    // for (const user of inserted) {
+    //   const doc = await ctx.db.get(user)
+    //   await usersAggregate.insert(ctx, doc)
+    // }
 
     return inserted
   },

@@ -70,6 +70,7 @@ export class ParseStage implements PipelineStage {
         context.originalDocument = dataToValidate
       }
 
+      console.log('validated data:', dataToValidate)
       return dataToValidate
     } catch (error) {
       throw new Error(`Data validation failed: ${error}`)

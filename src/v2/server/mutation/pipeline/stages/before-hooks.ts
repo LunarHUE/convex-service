@@ -6,6 +6,10 @@ import { ServiceField } from '../../../field'
 export class BeforeHookStage implements PipelineStage {
   name = 'before-hooks'
 
+  private mergeDocuments(originalDocument: any, processedDocument: any): any {
+    return { ...originalDocument, ...processedDocument }
+  }
+
   async execute(
     context: OperationContext<any, any, any>,
     data: any
@@ -27,7 +31,7 @@ export class BeforeHookStage implements PipelineStage {
         context.id
       )
       const updatedDoc = await context.ctx.db.get(context.id)
-      context.originalDocument = updatedDoc
+      context.originalDocument = this.mergeDocuments(updatedDoc, data)
     }
     context.processedDocument = data
 
