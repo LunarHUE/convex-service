@@ -36,7 +36,7 @@ export class ParseStage implements PipelineStage {
 
     try {
       let dataToValidate = data
-      const zodSchema = service.schema
+      const zodSchema = service.schemas.withoutSystemFieldsSchema
 
       if (context.operation === 'patch') {
         // For patch operations, we only need to validate the fields being patched

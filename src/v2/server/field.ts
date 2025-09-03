@@ -5,7 +5,6 @@ import type {
   BeforeOperation,
   AfterOperation,
   ValueFromZodValidator,
-  RemoveZodBrand,
 } from './types'
 
 type ExtractZodType<T extends Field> = T extends ServiceField<infer U>
@@ -18,7 +17,7 @@ type ExtractZodType<T extends Field> = T extends ServiceField<infer U>
 
 export type CreateZodSchemaFromFields<Fields extends GenericFields> =
   z.ZodObject<{
-    [K in keyof Fields]: RemoveZodBrand<ExtractZodType<Fields[K]>>
+    [K in keyof Fields]: ExtractZodType<Fields[K]>
   }>
 
 export type ServiceFieldsToConvex<Fields extends GenericFields> = ZodToConvex<

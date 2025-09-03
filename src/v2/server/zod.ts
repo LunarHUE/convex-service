@@ -2679,7 +2679,7 @@ type ValueFromZodValidator<Z extends z.ZodType> =
  * This prevents the runtime error: "Type 'undefined' is not assignable to type 'Value'"
  */
 // Type mapping helpers - Fixed for v4 constraint system with context-aware constraints
-type ConvexValidatorFromZod<
+export type ConvexValidatorFromZod<
   Z extends z.ZodType,
   Constraint extends 'required' | 'optional' = 'required'
 > = Z extends z.ZodAny

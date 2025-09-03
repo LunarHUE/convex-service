@@ -11,6 +11,7 @@ import { components } from './_generated/api'
 
 const fieldHooks = createFieldHooks<DataModel, 'users'>()
 const serviceHooks = createServiceHooks<DataModel, 'users'>()
+
 serviceHooks
   .before(async ({ value, operation }) => {
     // console.log('serviceHooks.before', value, operation)

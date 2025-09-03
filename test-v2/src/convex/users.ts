@@ -4,7 +4,6 @@ import { partial } from 'convex-helpers/validators'
 import { usersAggregate, usersService } from './users.def'
 import { query } from './_generated/server'
 
-const userValidator = usersService.validators.validator
 export const getUser = query({
   args: {
     id: v.id('users'),
@@ -17,14 +16,7 @@ export const getUser = query({
 
 export const insertMany = mutation({
   args: {
-    users: v.array(
-      v.object({
-        email: v.string(),
-        firstName: v.string(),
-        lastName: v.string(),
-        profileId: v.id('profiles'),
-      })
-    ),
+    users: v.array(usersService.validators.withoutDefaults),
   },
   handler: async (ctx, args) => {
     const inserted = await ctx.db.insert('users').many(args.users, {
@@ -41,17 +33,11 @@ export const insertMany = mutation({
 })
 
 export const insert = mutation({
-  args: {
-    email: v.string(),
-    firstName: v.string(),
-    lastName: v.string(),
-    profileId: v.id('profiles'),
-  },
+  args: usersService.validators.withoutDefaults,
   handler: async (ctx, args) => {
     const inserted = await ctx.db.insert('users').one(args)
-
-    const doc = await ctx.db.get(inserted)
-    await usersAggregate.insert(ctx, doc)
+    const test = usersService.schemas.withoutDefaultsSchema.safeParse(args)
+    console.log(test)
 
     return inserted
   },
@@ -122,12 +108,7 @@ export const test = query({
 })
 
 export const insertWithoutRestrictions = mutation({
-  args: {
-    email: v.string(),
-    firstName: v.string(),
-    lastName: v.string(),
-    profileId: v.id('profiles'),
-  },
+  args: usersService.validators.withoutDefaults,
   handler: async (ctx, args) => {
     const inserted = await ctx.db
       .insert('users')
@@ -142,8 +123,8 @@ export const patch = mutation({
     id: v.id('users'),
     patch: partial(usersService.validators.validator),
   },
-  handler: async (ctx, args) => {
-    const patched = await ctx.db.patch(args.id).one(args.patch)
+  handler: async (ctx, { id, patch }) => {
+    const patched = await ctx.db.patch(id).one(patch)
 
     return patched
   },

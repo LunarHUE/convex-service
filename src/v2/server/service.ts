@@ -5,10 +5,17 @@ import {
   GenericTableVectorIndexes,
   IndexTiebreakerField,
   TableDefinition,
+  type GenericDataModel,
   type SearchIndexConfig,
+  type TableNamesInDataModel,
   type VectorIndexConfig,
 } from 'convex/server'
-import { GenericValidator } from 'convex/values'
+import {
+  GenericValidator,
+  v,
+  type Validator,
+  type VObject,
+} from 'convex/values'
 import * as z from 'zod/v4'
 import { Expand } from '../types'
 import {
@@ -19,7 +26,13 @@ import {
   defineField,
   type CreateZodSchemaFromFields,
 } from './field'
-import { zodToConvex, type ZodToConvex } from './zod'
+import {
+  zid,
+  zodToConvex,
+  type ConvexValidatorFromZod,
+  type Zid,
+  type ZodToConvex,
+} from './zod'
 import type { GenericFieldHooks, GenericServiceHooks } from './hooks'
 import type { GenericRlsRules } from './rls'
 
@@ -65,24 +78,115 @@ type IndexStrategies<Fields extends GenericFields = any> = {
   vectorIndexes: VectorIndex<Fields>[]
 }
 
-type WithoutDefaultsValidator<
-  Fields extends GenericFields,
-  Schema extends CreateZodSchemaFromFields<Fields>
-> = ZodToConvex<Schema>
+// Helper type to check if a Zod type is a ZodDefault
+type IsZodDefault<T> = T extends z.ZodDefault<any> ? true : false
+
+// Helper type to check if a Zod type is a ZodOptional
+type IsZodOptional<T> = T extends z.ZodOptional<any> ? true : false
+
+// Helper type to unwrap ZodDefault to get the inner type
+type UnwrapZodDefault<T> = T extends z.ZodDefault<infer Inner> ? Inner : T
+
+// Helper type to unwrap ZodOptional to get the inner type
+type UnwrapZodOptional<T> = T extends z.ZodOptional<infer Inner> ? Inner : T
+
+// Helper type to get the original type from ZodDefault or ZodOptional
+type GetOriginalZodType<T> = UnwrapZodOptional<UnwrapZodDefault<T>>
+
+// For the "withoutDefaults" version, we need to exclude ZodDefault fields entirely
+type ZodFieldToConvexValidatorWithoutDefaults<T extends z.ZodType> =
+  IsZodDefault<T> extends true
+    ? never // Exclude ZodDefault fields entirely
+    : IsZodOptional<T> extends true
+    ? Validator<z.infer<GetOriginalZodType<T>>, 'optional', string>
+    : Validator<z.infer<T>, 'required', string>
+
+type TransformZodShapeToConvexWithoutDefaults<
+  Shape extends Record<string, z.ZodType>
+> = {
+  [K in keyof Shape as ZodFieldToConvexValidatorWithoutDefaults<
+    Shape[K]
+  > extends never
+    ? never
+    : K]: ZodFieldToConvexValidatorWithoutDefaults<Shape[K]>
+}
+
+// Helper type to preserve optional nature in the reconstructed Zod schema
+type PreserveOptionalInSchema<T extends z.ZodType> =
+  IsZodDefault<T> extends true
+    ? never // Exclude defaults entirely
+    : IsZodOptional<T> extends true
+    ? z.ZodOptional<GetOriginalZodType<T>> // Keep as optional
+    : T // Keep as-is for required fields
+
+type WithoutDefaultsServiceValidator<Schema extends z.ZodType> =
+  Schema extends z.ZodObject<infer Shape extends Record<string, z.ZodType>>
+    ? VObject<
+        // The inferred type from the transformed schema - this now preserves optionals
+        z.infer<
+          z.ZodObject<{
+            [K in keyof Shape as ZodFieldToConvexValidatorWithoutDefaults<
+              Shape[K]
+            > extends never
+              ? never
+              : K]: PreserveOptionalInSchema<Shape[K]>
+          }>
+        >,
+        // The validators object
+        TransformZodShapeToConvexWithoutDefaults<Shape>,
+        // Always required at the top level
+        'required',
+        // Field paths
+        string
+      >
+    : never
+
 type ServiceValidators<
   Fields extends GenericFields,
   Schema extends CreateZodSchemaFromFields<Fields>
 > = {
   validator: ZodToConvex<Schema>
-  withoutDefaults: GenericValidator
+  withoutDefaults: WithoutDefaultsServiceValidator<Schema>
 }
 
-// Without defaults will remove the defaults from the schema entirely as to not create default values from the parsing
-// This means that if you have a test: z.string().default("test") and then you use the withoutDefaults schema to parse it,
-// then the object at test: will be undefined since our schema doesnt have a default to parse to, but if you use the withDefaults schema to parse it, then the object at test: will be "test"
-type ServiceSchemas<Fields extends GenericFields> = {
-  withDefaults: CreateZodSchemaFromFields<Fields>
-  withoutDefaults: z.ZodType
+type RemoveZodDefault<T> = T extends z.ZodDefault<infer Inner>
+  ? Inner // Extract the inner type from ZodDefault
+  : T // Keep as-is if not a default
+
+// Transform all fields in a shape to remove defaults - using conditional type to ensure proper Zod constraint
+type RemoveDefaultsFromShape<Shape> = Shape extends Record<string, any>
+  ? {
+      [K in keyof Shape]: Shape[K] extends z.ZodDefault<infer Inner>
+        ? Inner
+        : Shape[K]
+    }
+  : never
+
+// Create a schema without defaults - using type assertion to work around Zod's internal constraints
+type CreateWithoutDefaultsSchema<Fields extends GenericFields> =
+  CreateZodSchemaFromFields<Fields> extends z.ZodObject<infer Shape>
+    ? z.ZodObject<RemoveDefaultsFromShape<Shape> & Record<string, z.ZodType>>
+    : never
+
+type SystemFields<TableName extends string> = {
+  _id: Zid<TableName>
+  _creationTime: z.ZodNumber
+}
+
+type CreateWithSystemFieldsSchema<
+  Fields extends GenericFields,
+  TableName extends string
+> = CreateZodSchemaFromFields<Fields> extends z.ZodObject<infer Shape>
+  ? z.ZodObject<Shape & SystemFields<TableName>>
+  : never
+
+type ServiceSchemas<
+  Fields extends GenericFields,
+  TableName extends string = ''
+> = {
+  withoutSystemFieldsSchema: CreateZodSchemaFromFields<Fields>
+  withoutDefaultsSchema: CreateWithoutDefaultsSchema<Fields>
+  withSystemFieldsSchema: CreateWithSystemFieldsSchema<Fields, TableName>
 }
 
 type CompositeUnique<Fields extends GenericFields> = {
@@ -195,11 +299,14 @@ export class ServiceTable<
 
 export type GenericRegisteredService = RegisteredService<any>
 
-export interface RegisteredService<Fields extends GenericFields> {
+export interface RegisteredService<
+  Fields extends GenericFields,
+  TableName extends string = ''
+> {
   fields: Fields
   validators: ServiceValidators<Fields, CreateZodSchemaFromFields<Fields>>
-  schema: CreateZodSchemaFromFields<Fields>
-  name: string
+  schemas: ServiceSchemas<Fields, TableName>
+  name: TableName
   $indexStrategies: IndexStrategies<Fields>
   $state: ServiceState<Fields>
   $hooks: {
@@ -209,13 +316,75 @@ export interface RegisteredService<Fields extends GenericFields> {
   $rls?: GenericRlsRules
 }
 
+/**
+ * Creates a Convex validator from a Zod schema, excluding fields with default values
+ */
+export function zodToConvexWithoutDefaults<Schema extends z.ZodObject>(
+  zodSchema: Schema
+): WithoutDefaultsServiceValidator<Schema> {
+  const shape = zodSchema.shape
+  const result: Record<string, GenericValidator> = {}
+
+  for (const [key, zodType] of Object.entries(shape)) {
+    if (zodType instanceof z.ZodDefault) {
+      continue
+    }
+
+    if (zodType instanceof z.ZodOptional) {
+      result[key] = v.optional(zodToConvex(zodType))
+    } else {
+      result[key] = zodToConvex(zodType)
+    }
+  }
+
+  return v.object(result) as WithoutDefaultsServiceValidator<Schema>
+}
+
+function createWithoutDefaultsSchema<Fields extends GenericFields>(
+  fields: Fields
+): CreateWithoutDefaultsSchema<Fields> {
+  const baseSchema = createZodSchemaFromFields(fields)
+  const shape = baseSchema.shape
+  const newShape: Record<string, z.ZodType> = {}
+
+  for (const [key, zodType] of Object.entries(shape)) {
+    if (zodType instanceof z.ZodDefault) {
+      const innerType = zodType.unwrap() as z.ZodType
+      newShape[key] = innerType
+    } else {
+      newShape[key] = zodType
+    }
+  }
+
+  return z.object(newShape) as CreateWithoutDefaultsSchema<Fields>
+}
+function createWithSystemFieldsSchema<
+  Fields extends GenericFields,
+  TableName extends string
+>(
+  fields: Fields,
+  tableName: TableName
+): CreateWithSystemFieldsSchema<Fields, TableName> {
+  const baseSchema = createZodSchemaFromFields(fields)
+  const systemFields = {
+    _id: zid(tableName),
+    _creationTime: z.number(),
+  }
+
+  return z.object({
+    ...baseSchema.shape,
+    ...systemFields,
+  }) as CreateWithSystemFieldsSchema<Fields, TableName>
+}
+
 export type GenericService = Service<any, any, any, any>
 
 export class Service<
   Fields extends GenericFields,
   Indexes extends GenericTableIndexes = {},
   SearchIndexes extends GenericTableSearchIndexes = {},
-  VectorIndexes extends GenericTableVectorIndexes = {}
+  VectorIndexes extends GenericTableVectorIndexes = {},
+  TableName extends string = string
 > {
   private _state: ServiceState<Fields> = {
     validators: {
@@ -224,15 +393,21 @@ export class Service<
     },
     compositeUniques: {},
   } as ServiceState<Fields>
+
+  private _schemas: ServiceSchemas<Fields, TableName> = {
+    withoutSystemFieldsSchema: {},
+    withSystemFieldsSchema: {},
+    withoutDefaultsSchema: {},
+  } as ServiceSchemas<Fields, TableName>
+
   private _indexStrategies: IndexStrategies<Fields> = {
     indexes: [],
     searchIndexes: [],
     vectorIndexes: [],
   }
+
   private _fields: Fields = {} as Fields
-  private _name: string = ''
-  private _schema: CreateZodSchemaFromFields<Fields> =
-    {} as CreateZodSchemaFromFields<Fields>
+  private _name: TableName = '' as TableName
 
   constructor(fields: Fields) {
     this._fields = Object.entries(fields).reduce((acc, [key, value]) => {
@@ -244,8 +419,20 @@ export class Service<
       return acc
     }, {} as AnyServiceFields) as Fields
 
-    this._schema = createZodSchemaFromFields(this._fields)
-    this._state.validators.validator = zodToConvex(this._schema)
+    this._schemas.withoutSystemFieldsSchema = createZodSchemaFromFields(
+      this._fields
+    )
+
+    this._schemas.withoutDefaultsSchema = createWithoutDefaultsSchema(
+      this._fields
+    )
+
+    this._state.validators.validator = zodToConvex(
+      this._schemas.withoutSystemFieldsSchema
+    )
+    this._state.validators.withoutDefaults = zodToConvexWithoutDefaults(
+      this._schemas.withoutSystemFieldsSchema
+    )
   }
 
   private cleanIndexName(name: string): string {
@@ -270,7 +457,8 @@ export class Service<
         >
     >,
     SearchIndexes,
-    VectorIndexes
+    VectorIndexes,
+    TableName
   > {
     const indexName = this.cleanIndexName(`by_${fields.join('_')}`)
     this._state.compositeUniques[indexName] = {
@@ -281,9 +469,19 @@ export class Service<
     return this
   }
 
-  public name(name: string): this {
-    this._name = name
-    return this
+  public name<NewName extends string>(
+    name: NewName
+  ): Service<Fields, Indexes, SearchIndexes, VectorIndexes, NewName> {
+    ;(this._name as any) = name
+    ;(this._schemas.withSystemFieldsSchema as any) =
+      createWithSystemFieldsSchema(this._fields, name)
+    return this as any as Service<
+      Fields,
+      Indexes,
+      SearchIndexes,
+      VectorIndexes,
+      NewName
+    >
   }
 
   public index<
@@ -303,7 +501,8 @@ export class Service<
         >
     >,
     SearchIndexes,
-    VectorIndexes
+    VectorIndexes,
+    TableName
   > {
     const indexName = this.cleanIndexName(`by_${fields.join('_')}`)
     this._indexStrategies.indexes.push({
@@ -333,7 +532,8 @@ export class Service<
           }
         >
     >,
-    VectorIndexes
+    VectorIndexes,
+    TableName
   > {
     this._indexStrategies.searchIndexes.push({
       indexDescriptor: name,
@@ -364,7 +564,8 @@ export class Service<
             filterFields: FilterFields
           }
         >
-    >
+    >,
+    TableName
   > {
     this._indexStrategies.vectorIndexes.push({
       indexDescriptor: name,
@@ -378,7 +579,7 @@ export class Service<
   public register(
     options: RegisteredServiceOptions = {}
   ): [
-    RegisteredService<Fields>,
+    RegisteredService<Fields, TableName>,
     TableDefinition<
       ServiceFieldsToConvex<Fields>,
       Expand<Indexes & GetUniqueFieldIndexes<Fields>>,
@@ -394,7 +595,7 @@ export class Service<
       }
     }
     const table = new ServiceTable(
-      this._state.validators.validator,
+      this._state.validators.validator as GenericValidator,
       this._indexStrategies
     ) as unknown as TableDefinition<
       ServiceFieldsToConvex<Fields>,
@@ -403,11 +604,11 @@ export class Service<
       VectorIndexes
     >
 
-    const service: RegisteredService<Fields> = {
+    const service: RegisteredService<Fields, TableName> = {
       fields: this._fields,
       validators: this._state.validators,
-      schema: this._schema,
-      name: this._name,
+      schemas: this._schemas,
+      name: this._name as TableName,
       $indexStrategies: this._indexStrategies,
       $state: this._state,
       $hooks: {
