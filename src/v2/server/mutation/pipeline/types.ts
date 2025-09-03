@@ -37,7 +37,7 @@ export interface OperationContext<
   ids?: GenericId<ServiceName>[]
   patchedFields?: Set<string>
   originalDocument?: any // Document before any modifications (for patch/delete operations)
-  processedData?: any // Data after before hooks stage (for after hooks)
+  processedDocument?: any // Data after before hooks stage (for after hooks)
   systemFields?: {
     _id?: GenericId<ServiceName>
     _creationTime?: number

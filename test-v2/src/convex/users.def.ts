@@ -3,10 +3,18 @@ import {
   createFieldHooks,
   createRlsRules,
   createServiceHooks,
+  type CreateZodSchemaFromFields,
+  type ZodToConvex,
+  type ServiceFieldsToConvex,
 } from '@lunarhue/convex-service/v2'
 import { defaultFields, emailField, profileIdField } from './fields'
 import { z } from 'zod/v4'
 import { DataModel } from './_generated/dataModel'
+import { TableAggregate } from '@convex-dev/aggregate'
+import { components } from './_generated/api'
+import type { DocumentByName, Expand, SystemFields } from 'convex/server'
+import { a } from 'vitest/dist/chunks/suite.d.FvehnV49.js'
+import type { Validator } from 'convex/values'
 
 const fieldHooks = createFieldHooks<DataModel, 'users'>()
 const rls = createRlsRules<DataModel, 'users'>()
@@ -27,13 +35,13 @@ rls.rule('read', async () => {
 
 serviceHooks
   .before(async ({ value, operation }) => {
-    console.log('serviceHooks.before', value, operation)
+    // console.log('serviceHooks.before', value, operation)
     return value
   })
   .after(async ({ oldValue, newValue, operation }) => {
-    console.log('serviceHooks.after oldValue', oldValue)
-    console.log('serviceHooks.after newValue', newValue)
-    console.log('serviceHooks.after operation', operation)
+    // console.log('serviceHooks.after oldValue', oldValue)
+    // console.log('serviceHooks.after newValue', newValue)
+    // console.log('serviceHooks.after operation', operation)
   })
 
 fieldHooks.field('fullName').before(async ({ value, operation }) => {
@@ -48,7 +56,10 @@ export const [usersService, usersTable] = defineService({
   // we have to use guid since zod throws a parsing error when using uuid even though it's a valid uuid. So we use
   // guid instead since it looks for uuid like strings rather than rfc 9562
   // idk what this problem stems from lol but its a bug.
-  uuid: z.guid().default(() => crypto.randomUUID()),
+  uuid: z
+    .string()
+    .uuid()
+    .default(() => crypto.randomUUID()),
   firstName: z.string(),
   lastName: z.string(),
   fullName: z.string().optional(),
@@ -62,3 +73,11 @@ export const [usersService, usersTable] = defineService({
     serviceHooks: serviceHooks,
     rls: rls,
   })
+
+export const usersAggregate = new TableAggregate<{
+  Key: number
+  DataModel: DataModel
+  TableName: 'users'
+}>(components.aggregate, {
+  sortKey: (doc) => doc._creationTime,
+})

@@ -5,6 +5,7 @@ import type {
 } from '../types'
 import type { GenericRegisteredService } from '../../../service'
 import { ServiceField } from '../../../field'
+import type { IndexRangeBuilder } from 'convex/server'
 
 export class RestrictionStage implements PipelineStage {
   name = 'restriction'
@@ -30,9 +31,6 @@ export class RestrictionStage implements PipelineStage {
     // Check composite unique constraints
     await this.checkCompositeUniques(context, service, data)
 
-    // TODO: Add relation checks here
-    // await this.checkRelations(context, service, data)
-
     return data
   }
 
@@ -44,10 +42,14 @@ export class RestrictionStage implements PipelineStage {
     for (const [fieldName, field] of Object.entries(service.fields)) {
       if (field instanceof ServiceField && ServiceField.isUnique(field)) {
         // For patch operations, only validate fields that are being patched
-        if (context.operation === 'patch' && context.patchedFields && !context.patchedFields.has(fieldName)) {
+        if (
+          context.operation === 'patch' &&
+          context.patchedFields &&
+          !context.patchedFields.has(fieldName)
+        ) {
           continue
         }
-        
+
         const fieldValue = data[fieldName]
         if (fieldValue !== undefined) {
           const result = await this.checkUniqueness(
@@ -64,7 +66,7 @@ export class RestrictionStage implements PipelineStage {
           } else if (result.action === 'error') {
             throw new Error(
               result.error ||
-                `Unique constraint violation for field ${fieldName}`
+                `Unique constraint violation for field ${fieldName} at ${fieldValue} for id ${result.replaceId}`
             )
           }
         }
@@ -82,14 +84,14 @@ export class RestrictionStage implements PipelineStage {
     )) {
       // For patch operations, only validate if at least one field in the composite is being patched
       if (context.operation === 'patch' && context.patchedFields) {
-        const hasAnyPatchedField = compositeUnique.fields.some(field => 
+        const hasAnyPatchedField = compositeUnique.fields.some((field) =>
           context.patchedFields!.has(field)
         )
         if (!hasAnyPatchedField) {
           continue
         }
       }
-      
+
       const values = compositeUnique.fields.map((field) => data[field])
 
       // Only check if all fields have values
@@ -125,6 +127,11 @@ export class RestrictionStage implements PipelineStage {
     service: GenericRegisteredService
   ): Promise<RestrictionCheckResult> {
     try {
+      console.log(
+        '[restriction] checking uniqueness query',
+        `by_${fieldName}`,
+        fieldValue
+      )
       const existing = await context.ctx.db
         .query(context.serviceName)
         .withIndex(`by_${fieldName}`, (q) => q.eq(fieldName, fieldValue))
@@ -132,16 +139,19 @@ export class RestrictionStage implements PipelineStage {
 
       if (existing) {
         // For replace/patch operations, ignore if it's the same document we're updating
-        if ((context.operation === 'replace' || context.operation === 'patch') && context.id) {
+        if (
+          (context.operation === 'replace' || context.operation === 'patch') &&
+          context.id
+        ) {
           if (existing._id === context.id) {
             // Same document, no conflict
             return { action: 'continue' }
           }
         }
-        
+
         return {
           action: 'error',
-          error: `Unique constraint violation: ${fieldName} already exists`,
+          error: `Unique constraint violation: ${fieldName} already exists at ${fieldValue} for id ${existing._id}`,
         }
       }
 
@@ -161,16 +171,26 @@ export class RestrictionStage implements PipelineStage {
     try {
       // Build index query for composite unique check
       const indexName = `by_${fields.join('_')}`
-      let query = context.ctx.db.query(context.serviceName).withIndex(indexName)
 
-      // Apply all field filters
-      for (let i = 0; i < fields.length; i++) {
-        const fieldName = fields[i]
-        const fieldValue = values[i]
-        query = query.filter((q) => q.eq(q.field(fieldName), fieldValue))
-      }
+      console.log(
+        '[restriction] checking composite uniqueness query',
+        indexName
+      )
 
-      const existing = await query.first()
+      const existing = await context.ctx.db
+        .query(context.serviceName)
+        .withIndex(indexName, (q) => {
+          let builder = q
+          for (let i = 0; i < fields.length; i++) {
+            builder = builder.eq(fields[i], values[i]) as IndexRangeBuilder<
+              any,
+              any,
+              0
+            >
+          }
+          return builder
+        })
+        .first()
 
       if (existing) {
         if (context.operation === 'insert') {

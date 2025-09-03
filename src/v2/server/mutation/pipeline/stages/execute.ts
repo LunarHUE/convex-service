@@ -27,10 +27,6 @@ export class ExecuteStage implements PipelineStage {
     data: any
   ): Promise<GenericId<any>> {
     const id = await context.ctx.db.insert(context.serviceName, data)
-    context.systemFields = {
-      _id: id,
-      _creationTime: Date.now(),
-    }
     return id
   }
 
@@ -66,11 +62,6 @@ export class ExecuteStage implements PipelineStage {
       await context.ctx.db.patch(context.id, data)
     }
 
-    context.systemFields = {
-      _id: context.id,
-      _creationTime: context.originalDocument._creationTime,
-    }
-
     return context.id
   }
 
@@ -82,10 +73,7 @@ export class ExecuteStage implements PipelineStage {
       throw new Error('ID required for replace operation')
     }
     await context.ctx.db.replace(context.id, data)
-    context.systemFields = {
-      _id: context.id,
-      _creationTime: Date.now(),
-    }
+
     return context.id
   }
 

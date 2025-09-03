@@ -2624,6 +2624,28 @@ type ConvexValidatorFromZodFieldsRequired<T extends { [key: string]: any }> = {
     : VAny<'required'>
 }
 
+type ValueFromZodValidator<Z extends z.ZodType> =
+  // Optional: unwrap and recurse
+  Z extends z.ZodOptional<infer T extends z.ZodType>
+    ? ValueFromZodValidator<T> | null
+    : // Nullable: unwrap and recurse
+    Z extends z.ZodNullable<infer T extends z.ZodType>
+    ? ValueFromZodValidator<T> | null
+    : // Array: recurse on element type
+    Z extends z.ZodArray<infer T extends z.ZodType>
+    ? Array<ValueFromZodValidator<T>>
+    : // Object: recurse on each field
+    Z extends z.ZodObject<infer Shape extends Record<string, z.ZodType>>
+    ? { [K in keyof Shape]: ValueFromZodValidator<Shape[K]> }
+    : // Tuple: recurse on each element
+    Z extends z.ZodTuple<infer Items extends readonly z.ZodType[]>
+    ? { [K in keyof Items]: ValueFromZodValidator<Items[K]> }
+    : // Record: recurse on value type
+    Z extends z.ZodRecord<any, infer V extends z.ZodType>
+    ? Record<string, ValueFromZodValidator<V>>
+    : // Union: fallback to z.infer (not possible to statically distribute)
+      z.infer<Z>
+
 /**
  * Zod Optional Field Shimming System (New in v4)
  *
@@ -2717,14 +2739,14 @@ type ConvexValidatorFromZod<
   : Z extends z.ZodArray<infer T>
   ? T extends z.ZodType
     ? VArray<
-        z.infer<Z>,
+        ValueFromZodValidator<Z>,
         ConvexValidatorFromZodRequired<T>, // ✅ Use helper to handle optional elements correctly
         Constraint // ✅ The array itself inherits the constraint
       >
     : VArray<z.infer<Z>, VAny<'required'>, Constraint> // ✅ Fixed here too
   : Z extends z.ZodObject<infer T>
   ? VObject<
-      z.infer<Z>, // ✅ Type first
+      ValueFromZodValidator<Z>, // ✅ Type first
       ConvexValidatorFromZodFields<T, 'required'>, // ✅ Always "required" for fields
       Constraint, // ✅ The object itself inherits the constraint
       string // ✅ FieldPaths fourth

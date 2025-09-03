@@ -1,7 +1,12 @@
 import * as z from 'zod/v4'
 import { ZodToConvex } from './zod'
 import type { Expand } from '../types'
-import type { BeforeOperation, AfterOperation } from './types'
+import type {
+  BeforeOperation,
+  AfterOperation,
+  ValueFromZodValidator,
+  RemoveZodBrand,
+} from './types'
 
 type ExtractZodType<T extends Field> = T extends ServiceField<infer U>
   ? U
@@ -9,9 +14,11 @@ type ExtractZodType<T extends Field> = T extends ServiceField<infer U>
   ? T
   : never
 
+// Helper type to remove Zod brands from a Zod schema
+
 export type CreateZodSchemaFromFields<Fields extends GenericFields> =
   z.ZodObject<{
-    [K in keyof Fields]: ExtractZodType<Fields[K]>
+    [K in keyof Fields]: RemoveZodBrand<ExtractZodType<Fields[K]>>
   }>
 
 export type ServiceFieldsToConvex<Fields extends GenericFields> = ZodToConvex<
@@ -37,25 +44,23 @@ export function createZodSchemaFromFields<T extends GenericFields>(
 export type Field = ServiceField | z.ZodType
 export type GenericFields = Record<string, Field>
 
-type ServiceFieldHooks<ZodValidator extends z.ZodType = z.ZodType> = {
-  before?: (
-    operation: BeforeOperation<z.infer<ZodValidator>>
-  ) => Promise<z.infer<ZodValidator>> | z.infer<ZodValidator>
-  after?: (
-    operation: AfterOperation<z.infer<ZodValidator>>
-  ) => Promise<void> | void
+type ServiceFieldHooks<
+  ZodValidator extends z.ZodType = z.ZodType,
+  Value extends ValueFromZodValidator<ZodValidator> = ValueFromZodValidator<ZodValidator>
+> = {
+  before?: (operation: BeforeOperation<Value>) => Promise<Value> | Value
+  after?: (operation: AfterOperation<Value>) => Promise<void> | void
 }
 
-type ServiceFieldHookSetters<ZodValidator extends z.ZodType = z.ZodType> = {
+type ServiceFieldHookSetters<
+  ZodValidator extends z.ZodType = z.ZodType,
+  Value extends ValueFromZodValidator<ZodValidator> = ValueFromZodValidator<ZodValidator>
+> = {
   before: (
-    hook: (
-      operation: BeforeOperation<z.infer<ZodValidator>>
-    ) => Promise<z.infer<ZodValidator>> | z.infer<ZodValidator>
+    hook: (operation: BeforeOperation<Value>) => Promise<Value> | Value
   ) => void
   after: (
-    hook: (
-      operation: AfterOperation<z.infer<ZodValidator>>
-    ) => Promise<void> | void
+    hook: (operation: AfterOperation<Value>) => Promise<void> | void
   ) => void
 }
 

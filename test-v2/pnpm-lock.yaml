@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@convex-dev/aggregate':
+        specifier: ^0.1.23
+        version: 0.1.23(convex@1.25.4)
       '@lunarhue/convex-service':
         specifier: file:../
         version: file:..(convex-helpers@0.1.104(convex@1.25.4)(typescript@5.9.2)(zod@3.25.76))(convex@1.25.4)(zod@3.25.76)
@@ -56,6 +59,11 @@ packages:
   '@babel/runtime@7.28.2':
     resolution: {integrity: sha512-KHp2IflsnGywDjBWDkR9iEqiWSpc8GIi0lgTT3mOElT0PP1tG26P4tmFI2YvAdzgq9RGyoHZQEIEdZy6Ec5xCA==}
     engines: {node: '>=6.9.0'}
+
+  '@convex-dev/aggregate@0.1.23':
+    resolution: {integrity: sha512-/Ga05atNulE+1LYXmRz0e+QBpEycmg0qeM9U6LN0Bj2wmC0swZgnfIwiaVUG+VhvqMcZUecmmN6lfe6ph3e+Kw==}
+    peerDependencies:
+      convex: ~1.16.5 || >=1.17.0 <1.35.0
 
   '@edge-runtime/primitives@6.0.0':
     resolution: {integrity: sha512-FqoxaBT+prPBHBwE1WXS1ocnu/VLTQyZ6NMUBAdbP7N2hsFTTxMC/jMu2D/8GAlMQfxeuppcPuCUk/HO3fpIvA==}
@@ -1235,6 +1243,10 @@ snapshots:
   '@babel/helper-validator-identifier@7.27.1': {}
 
   '@babel/runtime@7.28.2': {}
+
+  '@convex-dev/aggregate@0.1.23(convex@1.25.4)':
+    dependencies:
+      convex: 1.25.4
 
   '@edge-runtime/primitives@6.0.0': {}
 

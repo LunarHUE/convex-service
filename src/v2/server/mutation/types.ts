@@ -21,8 +21,14 @@ export interface InsertBuilder<
     ServiceName
   > = ExtractDocumentTypeWithoutDefaults<Schema, ServiceName>
 > {
-  one(document: TInput, config?: Partial<PipelineConfig>): Promise<GenericId<ServiceName>>
-  many(documents: TInput[], config?: Partial<PipelineConfig>): Promise<GenericId<ServiceName>[]>
+  one(
+    document: TInput,
+    config?: Partial<PipelineConfig>
+  ): Promise<GenericId<ServiceName>>
+  many(
+    documents: TInput[],
+    config?: Partial<PipelineConfig>
+  ): Promise<GenericId<ServiceName>[]>
 }
 
 export interface ReplaceOneBuilder<
@@ -33,7 +39,10 @@ export interface ReplaceOneBuilder<
     ServiceName
   > = ExtractDocumentTypeWithoutDefaults<Schema, ServiceName>
 > {
-  one(document: TInput, config?: Partial<PipelineConfig>): Promise<GenericId<ServiceName>>
+  one(
+    document: TInput,
+    config?: Partial<PipelineConfig>
+  ): Promise<GenericId<ServiceName>>
 }
 
 export interface ReplaceManyBuilder<
@@ -44,7 +53,10 @@ export interface ReplaceManyBuilder<
     ServiceName
   > = ExtractDocumentTypeWithoutDefaults<Schema, ServiceName>
 > {
-  many(documents: TInput[], config?: Partial<PipelineConfig>): Promise<GenericId<ServiceName>[]>
+  many(
+    documents: TInput[],
+    config?: Partial<PipelineConfig>
+  ): Promise<GenericId<ServiceName>[]>
 }
 
 export interface PatchOneBuilder<
@@ -55,7 +67,10 @@ export interface PatchOneBuilder<
     ServiceName
   > = ExtractDocumentTypeWithoutDefaults<Schema, ServiceName>
 > {
-  one(document: Partial<TInput>, config?: Partial<PipelineConfig>): Promise<GenericId<ServiceName>>
+  one(
+    document: Partial<TInput>,
+    config?: Partial<PipelineConfig>
+  ): Promise<GenericId<ServiceName>>
 }
 
 export interface PatchManyBuilder<
@@ -66,7 +81,10 @@ export interface PatchManyBuilder<
     ServiceName
   > = ExtractDocumentTypeWithoutDefaults<Schema, ServiceName>
 > {
-  many(documents: Partial<TInput>[], config?: Partial<PipelineConfig>): Promise<GenericId<ServiceName>[]>
+  many(
+    documents: Partial<TInput>[],
+    config?: Partial<PipelineConfig>
+  ): Promise<GenericId<ServiceName>[]>
 }
 
 // Main database interface that overrides Convex methods
@@ -142,9 +160,9 @@ export type DocumentWithOptionalDefaults<T> = T extends z.ZodObject<infer Shape>
         | z.ZodOptional<any>
         ? K
         : never]?: Shape[K] extends z.ZodDefault<infer Inner>
-        ? z.infer<Inner>
+        ? z.infer<Inner> | null
         : Shape[K] extends z.ZodOptional<infer OptionalInner>
-        ? z.infer<OptionalInner>
+        ? z.infer<OptionalInner> | null
         : never
     } & {
       [K in keyof Shape as Shape[K] extends
@@ -161,7 +179,7 @@ export type DocumentWithRequiredDefaults<T extends z.ZodType> =
         [K in keyof Shape as Shape[K] extends z.ZodOptional<any>
           ? K
           : never]?: Shape[K] extends z.ZodOptional<infer OptionalInner>
-          ? z.infer<OptionalInner>
+          ? z.infer<OptionalInner> | null
           : never
       } & {
         [K in keyof Shape as Shape[K] extends z.ZodOptional<any>

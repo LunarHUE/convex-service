@@ -71,11 +71,14 @@ export class OperationPipeline<
       if (!idToUse) {
         throw new Error('ID is required if service name is not provided')
       }
-      const serviceName = this._tableNameFromId(idToUse)
-      if (!serviceName) {
-        throw new Error(`ID ${idToUse} does not match any service name`)
+      if (!this.serviceName) {
+        console.log('[pipeline] no service name, getting from id', idToUse)
+        const serviceName = this._tableNameFromId(idToUse)
+        if (!serviceName) {
+          throw new Error(`ID ${idToUse} does not match any service name`)
+        }
+        this.serviceName = serviceName
       }
-      this.serviceName = serviceName
     }
 
     let context: OperationContext<DataModel, Schema, ServiceName> = {

@@ -8,11 +8,16 @@ export class ParseStage implements PipelineStage {
     context: OperationContext<any, any, any>,
     data: any
   ): Promise<any> {
+    // Only fetch for delete operations when afterHooks will run
     if (
       context.operation === 'delete' &&
       context.config.afterHooks &&
       context.id
     ) {
+      console.log(
+        '[parse] operation is delete and afterHooks is true, getting existing document',
+        context.id
+      )
       const existingDoc = await context.ctx.db.get(context.id)
       context.originalDocument = existingDoc
       return existingDoc
@@ -31,55 +36,41 @@ export class ParseStage implements PipelineStage {
 
     try {
       let dataToValidate = data
+      const zodSchema = service.schema
 
-      // Only pull the original document for replace operations if afterHooks will run,
-      // since we dont actually need it for parsing
-      if (
-        ((context.operation === 'replace' && context.config.afterHooks) ||
-          context.operation === 'patch') &&
-        context.id
-      ) {
-        const existingDoc = await context.ctx.db.get(context.id)
-        context.originalDocument = existingDoc
-      }
-
-      // For patch operations, fetch existing data and merge with patch data
       if (context.operation === 'patch') {
-        // Filter out fields that haven't actually changed
-        const changedFields: Record<string, any> = {}
-        for (const [key, value] of Object.entries(data)) {
-          // Only include field if the value is different from existing
-          if (context.originalDocument[key] !== value) {
-            changedFields[key] = value
-          }
+        // For patch operations, we only need to validate the fields being patched
+        // since existing data was already validated when originally inserted
+
+        // Track which fields are actually being patched
+        context.patchedFields = new Set(Object.keys(data))
+
+        // If no fields provided, return early
+        if (Object.keys(data).length === 0) {
+          return {}
         }
 
-        // Track which fields are actually being patched (only changed fields)
-        context.patchedFields = new Set(Object.keys(changedFields))
+        // Create a partial schema for just the patched fields
+        const patchedFieldsSchema = zodSchema.partial().pick(
+          Object.keys(data).reduce((acc, key) => {
+            acc[key] = true
+            return acc
+          }, {} as Record<string, true>)
+        )
 
-        // If no fields changed, we still need to return the full document for validation
-        // but the execute stage can detect this and skip the patch
-        if (Object.keys(changedFields).length === 0) {
-          // No actual changes, return existing document as-is
-          dataToValidate = context.originalDocument
-        } else {
-          // Merge existing data with only the changed fields
-          dataToValidate = {
-            ...context.originalDocument,
-            ...changedFields,
-          }
-        }
+        // Validate only the patched fields
+        dataToValidate = Array.isArray(data)
+          ? data.map((item) => patchedFieldsSchema.parse(item))
+          : patchedFieldsSchema.parse(data)
+      } else {
+        // For insert/replace operations, validate the full data with defaults
+        dataToValidate = Array.isArray(data)
+          ? data.map((item) => zodSchema.parse(item))
+          : zodSchema.parse(data)
+        context.originalDocument = dataToValidate
       }
 
-      // Use the service's schema with defaults to parse and validate the data
-      const zodSchema = service.schemas.withDefaults
-
-      // Parse and validate the data, applying defaults automatically
-      const parsedData = Array.isArray(dataToValidate)
-        ? dataToValidate.map((item) => zodSchema.parse(item))
-        : zodSchema.parse(dataToValidate)
-
-      return parsedData
+      return dataToValidate
     } catch (error) {
       throw new Error(`Data validation failed: ${error}`)
     }

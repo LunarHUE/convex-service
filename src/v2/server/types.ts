@@ -38,6 +38,21 @@ export type BeforeOperation<
   ctx: ServiceOperationCtx<GenericDataModel, Ctx>
 }
 
+export type RemoveZodBrand<T> = T extends z.ZodTransform<infer U, any>
+  ? RemoveZodBrand<U> // Handle zBrand() transforms by extracting the input schema
+  : T extends z.ZodPipe<infer U, z.ZodTransform<infer V, infer Brand>>
+  ? RemoveZodBrand<U> // Handle native Zod brands
+  : T extends z.ZodType
+  ? T
+  : never
+
+export type ValueFromZodValidator<
+  ZodValidator extends z.ZodType,
+  Schema extends z.ZodType = RemoveZodBrand<ZodValidator>
+> = Schema extends z.ZodOptional<infer Inner extends z.ZodType>
+  ? z.infer<Inner> | null
+  : z.infer<Schema>
+
 export type BeforeOperationByDataModel<
   DataModel extends GenericDataModel = GenericDataModel,
   TableName extends TableNamesInDataModel<DataModel> = TableNamesInDataModel<DataModel>,

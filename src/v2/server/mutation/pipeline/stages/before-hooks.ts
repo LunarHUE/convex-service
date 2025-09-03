@@ -21,7 +21,15 @@ export class BeforeHookStage implements PipelineStage {
       throw new Error(`Service ${context.serviceName} not found in schema`)
     }
 
-    let processedData = data
+    if (context.id && !context.originalDocument) {
+      console.log(
+        '[before-hooks] no original document, getting from db',
+        context.id
+      )
+      const updatedDoc = await context.ctx.db.get(context.id)
+      context.originalDocument = updatedDoc
+    }
+    context.processedDocument = data
 
     // Execute service-level before hooks
     if (service.$hooks.service) {
@@ -30,9 +38,8 @@ export class BeforeHookStage implements PipelineStage {
         const hookOperation = this.mapOperationType(context.operation)
         const hookCtx = { ...context.ctx, meta: {} }
 
-        const old = processedData
-        processedData = await serviceHooks.before({
-          value: processedData,
+        context.processedDocument = await serviceHooks.before({
+          value: context.originalDocument,
           operation: hookOperation,
           ctx: hookCtx,
         })
@@ -40,13 +47,13 @@ export class BeforeHookStage implements PipelineStage {
         // and for any changed key, add it to context.patchedFields (for patch operations).
         if (context.operation === 'patch' && context.patchedFields) {
           if (
-            old &&
-            processedData &&
-            typeof old === 'object' &&
-            typeof processedData === 'object'
+            context.originalDocument &&
+            typeof context.originalDocument === 'object'
           ) {
-            for (const key of Object.keys(processedData)) {
-              if (old[key] !== processedData[key]) {
+            for (const key of Object.keys(context.originalDocument)) {
+              if (
+                context.originalDocument[key] !== context.processedDocument[key]
+              ) {
                 context.patchedFields.add(key)
               }
             }
@@ -63,8 +70,8 @@ export class BeforeHookStage implements PipelineStage {
         if (fieldHook.before) {
           const hookOperation = this.mapOperationType(context.operation)
           const hookCtx = { ...context.ctx, meta: {} }
-          processedData[fieldName] = await fieldHook.before({
-            value: processedData,
+          context.processedDocument[fieldName] = await fieldHook.before({
+            value: context.originalDocument,
             operation: hookOperation,
             ctx: hookCtx,
           })
@@ -83,8 +90,8 @@ export class BeforeHookStage implements PipelineStage {
           const hookOperation = this.mapOperationType(context.operation)
           const hookCtx = { ...context.ctx, meta: {} }
 
-          processedData[fieldName] = await fieldHooks.before({
-            value: processedData,
+          context.processedDocument[fieldName] = await fieldHooks.before({
+            value: context.originalDocument,
             operation: hookOperation,
             ctx: hookCtx,
           })
@@ -95,10 +102,7 @@ export class BeforeHookStage implements PipelineStage {
       }
     }
 
-    // Store processed data in context for use by after hooks
-    context.processedData = processedData
-
-    return processedData
+    return context.processedDocument
   }
 
   private mapOperationType(operation: string): 'insert' | 'update' | 'delete' {

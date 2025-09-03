@@ -21,21 +21,27 @@ export class AfterHookStage implements PipelineStage {
     let oldValue: any
     let newValue: any
 
+    if (context.id && !context.processedDocument) {
+      console.log(
+        '[after-hooks] no processed document, getting from db',
+        context.id
+      )
+      const updatedDoc = await context.ctx.db.get(context.id)
+      context.processedDocument = updatedDoc
+    }
+
     switch (context.operation) {
       case 'insert':
         oldValue = undefined
-        newValue = { ...context.processedData, ...context.systemFields }
+        newValue = context.processedDocument
         break
       case 'patch':
         oldValue = context.originalDocument
-        newValue = {
-          ...context.processedData,
-          ...context.systemFields,
-        }
+        newValue = context.processedDocument
         break
       case 'replace':
-        oldValue = { ...context.originalDocument, ...context.systemFields }
-        newValue = { ...context.processedData, ...context.systemFields }
+        oldValue = context.originalDocument
+        newValue = context.processedDocument
         break
       case 'delete':
         oldValue = context.originalDocument
@@ -43,7 +49,7 @@ export class AfterHookStage implements PipelineStage {
         break
       default:
         oldValue = undefined
-        newValue = context.originalDocument
+        newValue = context.processedDocument
     }
 
     // Execute service-level after hooks
