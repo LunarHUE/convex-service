@@ -1,0 +1,225 @@
+---
+title: LLM Integration
+description: Learn how to use the LLM-friendly documentation endpoints powered by Next.js rewrites
+---
+
+# LLM Integration
+
+The Convex Service documentation includes built-in LLM (Large Language Model) integration endpoints that provide documentation in a format optimized for AI consumption. This is powered by Next.js rewrites that transform documentation content for better AI processing.
+
+## Overview
+
+The LLM integration system uses Next.js rewrites to create specialized endpoints that serve documentation content in a format that's optimized for LLMs, including:
+
+- Processed Markdown/MDX content
+- Structured metadata
+- Clean text output without UI elements
+- Comprehensive content aggregation
+
+## Endpoints
+
+### Individual Page Endpoint
+
+Access any documentation page in LLM-friendly format:
+
+```
+/docs/{path}.mdx
+```
+
+This endpoint is automatically rewritten to `/llms.mdx/{path}` and returns processed content for the specified documentation page.
+
+**Example requests:**
+```bash
+# Get the getting started guide
+curl https://your-docs-site.com/docs/getting-started.mdx
+
+# Get service builder documentation
+curl https://your-docs-site.com/docs/service-builder/defining-services.mdx
+
+# Get API reference
+curl https://your-docs-site.com/docs/api-reference/service-builder.mdx
+```
+
+**Response format:**
+```
+# Page Title
+URL: /docs/page-path
+
+Page description
+
+[Processed markdown content without frontmatter]
+```
+
+### Full Documentation Endpoint
+
+Get all documentation in a single request:
+
+```
+/llms-full.txt
+```
+
+This endpoint aggregates all documentation pages into one comprehensive text document.
+
+**Example request:**
+```bash
+curl https://your-docs-site.com/llms-full.txt
+```
+
+## How It Works
+
+### 1. Next.js Rewrite Configuration
+
+The system uses a Next.js rewrite rule defined in `docs/next.config.mjs`:
+
+```javascript
+async rewrites() {
+  return [
+    {
+      source: '/docs/:path*.mdx',
+      destination: '/llms.mdx/:path*',
+    },
+  ]
+}
+```
+
+This rule intercepts requests to `/docs/*.mdx` and internally redirects them to the `/llms.mdx/*` API route.
+
+### 2. Content Processing
+
+The API route at `/app/llms.mdx/[...slug]/route.ts` processes the content:
+
+1. **Page Resolution**: Uses the source configuration to find the requested page
+2. **Markdown Processing**: Applies remark plugins to process MDX content:
+   - `remark-mdx`: Handles MDX syntax
+   - `remark-include`: Processes include directives
+   - `remark-gfm`: GitHub Flavored Markdown support
+3. **Content Transformation**: Converts the processed content to a clean, LLM-friendly format
+
+### 3. Output Format
+
+The processed content includes:
+- Page title as a header
+- Page URL for reference
+- Page description
+- Clean markdown content without frontmatter
+
+## Use Cases
+
+### AI-Powered Documentation Search
+
+```javascript
+// Example: Building an AI search for documentation
+async function searchDocs(query) {
+  const allDocs = await fetch('/llms-full.txt').then(r => r.text())
+  
+  // Send to your AI service with the query and full docs
+  return await aiService.search(query, allDocs)
+}
+```
+
+### Documentation Analysis
+
+```javascript
+// Example: Analyze specific documentation sections
+async function analyzePage(pagePath) {
+  const pageContent = await fetch(`/docs/${pagePath}.mdx`).then(r => r.text())
+  
+  // Process with AI for analysis
+  return await aiService.analyze(pageContent)
+}
+```
+
+### Content Generation
+
+```javascript
+// Example: Generate examples based on documentation
+async function generateExamples(topic) {
+  const relevantDocs = await fetch(`/docs/${topic}.mdx`).then(r => r.text())
+  
+  // Generate examples using the documentation as context
+  return await aiService.generateExamples(relevantDocs)
+}
+```
+
+## Technical Details
+
+### Content Processing Pipeline
+
+1. **Source Integration**: Uses Fumadocs source configuration to access page metadata and content
+2. **Remark Processing**: Transforms MDX content through multiple plugins
+3. **Static Generation**: Pre-generates static paths for optimal performance
+4. **Caching**: Responses are cached indefinitely (`revalidate = false`)
+
+### Dependencies
+
+The LLM integration relies on:
+- `remark`: Markdown processor
+- `remark-gfm`: GitHub Flavored Markdown support
+- `remark-mdx`: MDX syntax support
+- `remark-include`: Include directive support
+- `fumadocs-core`: Source management
+- `fumadocs-mdx`: MDX configuration
+
+## Configuration
+
+### Customizing Content Processing
+
+You can modify the content processing pipeline by editing `/lib/get-llm-text.ts`:
+
+```typescript
+const processor = remark()
+  .use(remarkMdx)
+  .use(remarkInclude)
+  .use(remarkGfm)
+  // Add your custom plugins here
+```
+
+### Adding Custom Endpoints
+
+Create additional LLM endpoints by adding new API routes:
+
+```typescript
+// app/api/llm-custom/route.ts
+export async function GET() {
+  // Your custom processing logic
+  return new Response(customFormattedContent)
+}
+```
+
+## Best Practices
+
+### For API Consumers
+
+1. **Cache Responses**: The content doesn't change frequently, so cache responses appropriately
+2. **Handle 404s**: Check for `404` responses when requesting specific pages
+3. **Respect Rate Limits**: Implement appropriate rate limiting when making multiple requests
+
+### For Content Authors
+
+1. **Clear Structure**: Use clear headings and structure for better AI parsing
+2. **Comprehensive Descriptions**: Include good page descriptions in frontmatter
+3. **Code Examples**: Provide complete, runnable code examples
+
+### For Developers
+
+1. **Monitor Performance**: Watch bundle size and response times
+2. **Update Dependencies**: Keep remark plugins updated for best processing
+3. **Test Regularly**: Verify endpoints work correctly after content updates
+
+## Troubleshooting
+
+### Common Issues
+
+**404 Errors**: Ensure the requested page exists in the documentation source configuration.
+
+**Processing Errors**: Check that MDX content is valid and doesn't have syntax errors.
+
+**Missing Content**: Verify that the page is included in the source configuration and has been built.
+
+**Slow Responses**: Consider implementing caching if processing large amounts of content.
+
+## Next Steps
+
+- Explore the [Getting Started Guide](/docs/getting-started) to understand the main documentation
+- Check the [API Reference](/docs/api-reference/service-builder) for complete method documentation
+- Visit the [Service Builder](/docs/service-builder/defining-services) documentation for core concepts
