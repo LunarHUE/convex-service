@@ -33,15 +33,12 @@ fieldHooks.field('fullName').before(async ({ value, operation }) => {
 export const [usersService, usersTable] = defineService({
   email: emailField,
   // we have to use guid since zod throws a parsing error when using uuid even though it's a valid uuid. So we use
-  // guid instead since it looks for uuid like strings rather than rfc 9562
-  // idk what this problem stems from lol but its a bug.
-  uuid: z
-    .string()
-    .uuid()
-    .default(() => crypto.randomUUID()),
+  // guid instead since it looks for uuid like strings rather than the exact rfc format. Idk its weird i think it might
+  // be related to the node version that crypto.randomUUID() uses vs the most up to date version uses the correct rfc format.
+  uuid: z.guid().default(() => crypto.randomUUID()),
   firstName: z.string(),
   lastName: z.string(),
-  fullName: z.string().optional(),
+  fullName: z.string().nullable().default(null),
   profileId: profileIdField,
   ...defaultFields,
 })

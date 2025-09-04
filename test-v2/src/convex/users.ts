@@ -3,6 +3,7 @@ import { mutation } from '../lib/mutation'
 import { partial } from 'convex-helpers/validators'
 import { usersAggregate, usersService } from './users.def'
 import { query } from './_generated/server'
+import { z } from 'zod/v4'
 
 export const getUser = query({
   args: {
@@ -36,8 +37,6 @@ export const insert = mutation({
   args: usersService.validators.withoutDefaults,
   handler: async (ctx, args) => {
     const inserted = await ctx.db.insert('users').one(args)
-    const test = usersService.schemas.withoutDefaultsSchema.safeParse(args)
-    console.log(test)
 
     return inserted
   },

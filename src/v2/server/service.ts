@@ -149,23 +149,19 @@ type ServiceValidators<
   withoutDefaults: WithoutDefaultsServiceValidator<Schema>
 }
 
-type RemoveZodDefault<T> = T extends z.ZodDefault<infer Inner>
-  ? Inner // Extract the inner type from ZodDefault
-  : T // Keep as-is if not a default
-
 // Transform all fields in a shape to remove defaults - using conditional type to ensure proper Zod constraint
 type RemoveDefaultsFromShape<Shape> = Shape extends Record<string, any>
   ? {
-      [K in keyof Shape]: Shape[K] extends z.ZodDefault<infer Inner>
-        ? Inner
-        : Shape[K]
+      [K in keyof Shape as Shape[K] extends z.ZodDefault<any>
+        ? never
+        : K]: Shape[K]
     }
   : never
 
 // Create a schema without defaults - using type assertion to work around Zod's internal constraints
 type CreateWithoutDefaultsSchema<Fields extends GenericFields> =
   CreateZodSchemaFromFields<Fields> extends z.ZodObject<infer Shape>
-    ? z.ZodObject<RemoveDefaultsFromShape<Shape> & Record<string, z.ZodType>>
+    ? z.ZodObject<RemoveDefaultsFromShape<Shape>>
     : never
 
 type SystemFields<TableName extends string> = {
@@ -307,6 +303,11 @@ export interface RegisteredService<
   validators: ServiceValidators<Fields, CreateZodSchemaFromFields<Fields>>
   schemas: ServiceSchemas<Fields, TableName>
   name: TableName
+  types: {
+    withoutSystemFields: z.infer<CreateZodSchemaFromFields<Fields>>
+    withoutDefaults: z.infer<CreateWithoutDefaultsSchema<Fields>>
+    withSystemFields: z.infer<CreateWithSystemFieldsSchema<Fields, TableName>>
+  }
   $indexStrategies: IndexStrategies<Fields>
   $state: ServiceState<Fields>
   $hooks: {
@@ -348,10 +349,7 @@ function createWithoutDefaultsSchema<Fields extends GenericFields>(
   const newShape: Record<string, z.ZodType> = {}
 
   for (const [key, zodType] of Object.entries(shape)) {
-    if (zodType instanceof z.ZodDefault) {
-      const innerType = zodType.unwrap() as z.ZodType
-      newShape[key] = innerType
-    } else {
+    if (!(zodType instanceof z.ZodDefault)) {
       newShape[key] = zodType
     }
   }
@@ -609,6 +607,13 @@ export class Service<
       validators: this._state.validators,
       schemas: this._schemas,
       name: this._name as TableName,
+      types: {
+        withoutSystemFields: {} as z.infer<CreateZodSchemaFromFields<Fields>>,
+        withoutDefaults: {} as z.infer<CreateWithoutDefaultsSchema<Fields>>,
+        withSystemFields: {} as z.infer<
+          CreateWithSystemFieldsSchema<Fields, TableName>
+        >,
+      },
       $indexStrategies: this._indexStrategies,
       $state: this._state,
       $hooks: {
